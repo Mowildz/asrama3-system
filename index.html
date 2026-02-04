@@ -550,6 +550,46 @@ body.dark #grafikPage #statSantri .stat-card {
   transform: translateY(0);
 }
 
+@media (max-width:768px){
+  .card, .stat-card, .santri-mini-card {
+    margin-bottom: 14px;
+  }
+
+  main {
+    padding-top: 55px; /* biar gak ketutup tombol ☰ */
+  }
+}
+
+@media (max-width:768px){
+  button {
+    padding: 12px;
+    font-size: 15px;
+    border-radius: 10px;
+  }
+
+  .action-btn {
+    padding: 8px;
+    font-size: 16px;
+  }
+}
+
+.mobile-header{
+  font-size:18px;
+  font-weight:600;
+  margin-bottom:15px;
+}
+
+@media (min-width:769px){
+  .mobile-header{ display:none; }
+}
+
+@media (max-width:768px){
+  .profile-card{
+    width: 92% !important;
+    padding: 20px;
+  }
+}
+
 </style>
 </head>
 
@@ -587,6 +627,7 @@ body.dark #grafikPage #statSantri .stat-card {
 <main>
   <!-- ================= HALAMAN DATA SANTRI ================= -->
 <div id="santriPage" class="page">
+  <div class="mobile-header">Data Santri</div>
   <div class="card">
 
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
@@ -601,6 +642,7 @@ body.dark #grafikPage #statSantri .stat-card {
 </div>
 
   <div id="inputPage" class="page active">
+    <div class="mobile-header">Input Data Pelanggaran</div>
 <!-- INPUT -->
 <div class="card">
   <div class="search-box">
@@ -628,6 +670,8 @@ body.dark #grafikPage #statSantri .stat-card {
     <option>Qism Kesehatan</option>
   </select>
   <input id="pelanggaran" placeholder="Jenis Pelanggaran">
+  <label>Tanggal Kejadian</label>
+  <input type="date" id="tanggal">
   <button onclick="tambahData()">Tambah</button>
 </div>
 </div>
@@ -660,6 +704,7 @@ body.dark #grafikPage #statSantri .stat-card {
 
 <!-- ================= HALAMAN GRAFIK ================= -->
 <div id="grafikPage" class="page">
+  <div class="mobile-header">Grafik & Ranking</div>
 
   <button onclick="exportPDF()" style="margin-bottom:15px;">
   <i class="fas fa-file-pdf"></i> Export PDF Laporan
@@ -816,50 +861,70 @@ async function tambahData() {
     kelas: kelas.value,
     qism: qism.value,
     pelanggaran: pelanggaran.value,
-    tanggal: new Date().toLocaleDateString('id-ID')
+    tanggal: document.getElementById("tanggal").value
   };
 
-  if (!item.nama || !item.kelas || !item.qism || !item.pelanggaran) {
-    alert("Lengkapi data!");
+  if (!item.nama || !item.kelas || !item.qism || !item.pelanggaran || !item.tanggal) {
+    alert("Lengkapi data termasuk tanggal!");
     return;
   }
 
   if (editIndex !== null) {
-    dataMukholif[editIndex] = item;
+    item.id = dataMukholif[editIndex].id; // 🔥 ambil ID lama
+    await updateFirestore(item);          // 🔥 update Firestore
     editIndex = null;
+  } else {
+    await simpanFirestore(item);          // tambah baru
   }
-  else {
-  await simpanFirestore(item);
-  await ambilDataFirestore();
-}
 
-resetForm();
-render();
+  await ambilDataFirestore();             // refresh dari server
+  resetForm();
 }
 
 function editData(i) {
   const d = dataMukholif[i];
+
   nama.value = d.nama;
   kelas.value = d.kelas;
   qism.value = d.qism;
   pelanggaran.value = d.pelanggaran;
+
+  // 🔥 langsung isi karena format sudah yyyy-mm-dd
+  document.getElementById("tanggal").value = d.tanggal;
+
   editIndex = i;
 }
 
-function hapusData(i) {
-  if (confirm("Hapus data?")) {
-    dataMukholif.splice(i,1);
-    simpan();
-    render();
-  }
+async function hapusData(i) {
+  if (!confirm("Hapus data?")) return;
+
+  const id = dataMukholif[i].id;
+  await db.collection("pelanggaran").doc(id).delete();
+  await ambilDataFirestore();
 }
 
 async function simpanFirestore(item) {
   await db.collection("pelanggaran").add(item);
 }
 
+async function updateFirestore(item) {
+  await db.collection("pelanggaran").doc(item.id).update({
+    nama: item.nama,
+    kelas: item.kelas,
+    qism: item.qism,
+    pelanggaran: item.pelanggaran,
+    tanggal: item.tanggal
+  });
+}
+
 function resetForm() {
-  nama.value = kelas.value = qism.value = pelanggaran.value = "";
+  nama.value = "";
+  kelas.value = "";
+  qism.value = "";
+  pelanggaran.value = "";
+
+  // 👉 Reset tanggal ke hari ini
+  document.getElementById("tanggal").valueAsDate = new Date();
 }
 
 /* RENDER */
@@ -1210,12 +1275,19 @@ async function ambilDataFirestore() {
     ...doc.data()
   }));
   render();
+  updateGrafik();
 }
+
+// Set default tanggal hari ini
+window.addEventListener("load", () => {
+  document.getElementById("tanggal").valueAsDate = new Date();
+});
 
 loadSantri();
 ambilDataFirestore();
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <!-- FIREBASE -->
